@@ -1,3 +1,5 @@
+#### Update - This project is on hold until I create an App within the Meta Developers Portal. Will look at this again in a week or two (est. October 14, 2024).
+
 # Threads Auto-Poster
 
 This project allows you to schedule and automatically post content to Threads using the Threads API. It uses GitHub Pages for the user interface and GitHub Actions for scheduling and posting.
