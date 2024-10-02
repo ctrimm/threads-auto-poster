@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Threads Auto-Poster</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Add Post to Threads Queue</h1>
+    <form id="postForm">
+      <textarea id="postText" placeholder="Enter your post text here" required></textarea>
+      <select id="mediaType">
+        <option value="TEXT">Text Only</option>
+        <option value="IMAGE">Image</option>
+        <option value="VIDEO">Video</option>
+      </select>
+      <input type="file" id="mediaFile" accept="image/*,video/*">
+      <input type="datetime-local" id="scheduledTime" required>
+      <button type="submit">Add to Queue</button>
+    </form>
+    <div id="message"></div>
+    <h2>Current Queue</h2>
+    <ul id="queueList"></ul>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
