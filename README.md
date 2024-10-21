@@ -1,4 +1,4 @@
-#### Update - This project is on hold until I create an App within the Meta Developers Portal. Will look at this again in a week or two (est. October 14, 2024).
+#### Update - This project is on hold until I create an App within the Meta Developers Portal. Will look at this again in a week or two (est. November 1, 2024).
 
 # Threads Auto-Poster
 
