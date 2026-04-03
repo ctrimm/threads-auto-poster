@@ -1,5 +1,3 @@
-#### Update - This project is on hold until I create an App within the Meta Developers Portal. Will look at this again in a week or two (est. November 1, 2024).
-
 # Threads Auto-Poster
 
 This project allows you to schedule and automatically post content to Threads using the Threads API. It uses GitHub Pages for the user interface and GitHub Actions for scheduling and posting.
@@ -12,17 +10,14 @@ This project allows you to schedule and automatically post content to Threads us
 
 2. Clone the `threads-auto-poster` repository to your local machine.
 
-3. Update the following files with your GitHub username:
-   - `docs/script.js`: Replace `YOUR_USERNAME` with your GitHub username
-
-4. In your GitHub repository settings:
+3. In your GitHub repository settings:
    - Enable GitHub Pages and set the source to the `docs/` folder on the main branch.
    - Add the following secrets:
      - `THREADS_ACCESS_TOKEN`: Your Threads API access token
      - `THREADS_USER_ID`: Your Threads user ID
      - `GITHUB_TOKEN`: A personal access token with repo scope
 
-5. Commit and push all changes to GitHub.
+4. Commit and push all changes to GitHub.
 
 ## Usage
 
@@ -88,6 +83,10 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ``` json
 threads-auto-poster/
+├── .claude/
+│   ├── hooks/
+│   │   └── session-start.sh
+│   └── settings.json
 ├── .github/
 │   └── workflows/
 │       ├── post-to-threads.yml
@@ -99,6 +98,9 @@ threads-auto-poster/
 ├── src/
 │   ├── post_to_threads.py
 │   └── queue_manager.py
+├── tests/
+│   ├── test_queue_manager.py
+│   └── test_post_to_threads.py
 ├── .gitignore
 ├── README.md
 ├── requirements.txt

@@ -47,13 +47,21 @@ def post_to_threads(post):
 
 def main():
   queue_manager = QueueManager('queue.json')
-  next_post = queue_manager.get_next_post()
+  published = 0
 
-  if next_post:
+  while True:
+    next_post = queue_manager.get_next_post()
+    if not next_post:
+      break
     success = post_to_threads(next_post)
     if success:
       queue_manager.remove_post(next_post['id'])
-      queue_manager.save_queue()
+      published += 1
+    else:
+      # Stop on failure to avoid hammering the API with a broken post
+      break
+
+  print(f"Published {published} post(s) this run.")
 
 if __name__ == "__main__":
   main()

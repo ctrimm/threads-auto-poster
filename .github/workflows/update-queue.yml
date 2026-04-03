@@ -28,5 +28,5 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add queue.json
-        git commit -m "Update and sort queue" -a || echo "No changes to commit"
+        git commit -m "Update and sort queue [skip ci]" -a || echo "No changes to commit"
         git push
