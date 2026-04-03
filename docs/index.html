@@ -8,7 +8,15 @@
 </head>
 <body>
   <div class="container">
-    <h1>Add Post to Threads Queue</h1>
+    <h1>Threads Auto-Poster</h1>
+    <details>
+      <summary>Settings</summary>
+      <div class="settings">
+        <label for="tokenInput">GitHub Personal Access Token (saved to browser only)</label>
+        <input type="password" id="tokenInput" placeholder="ghp_..." autocomplete="off">
+      </div>
+    </details>
+    <h2>Add Post to Queue</h2>
     <form id="postForm">
       <textarea id="postText" placeholder="Enter your post text here" required></textarea>
       <select id="mediaType">
