@@ -52,6 +52,24 @@ This project allows you to schedule and automatically post content to Threads us
 - `.github/workflows/update-queue.yml`: GitHub Action for updating and sorting the queue
 - `queue.json`: Stores the queue of posts to be published
 
+## Optional: Claude Code Session Hook
+
+If you use [Claude Code](https://claude.ai/code), you can set up a `SessionStart` hook so that every time you open a session in this repo, Claude will automatically read the queue and ask if you'd like to add a new post.
+
+The hook files are already included in `.claude/`. To enable them, run the following from the repo root:
+
+```bash
+# Make the hook executable
+chmod +x .claude/hooks/session-start.sh
+
+# Verify it works (requires python3)
+CLAUDE_PROJECT_DIR=$(pwd) .claude/hooks/session-start.sh
+```
+
+You should see a JSON response with a prompt summarising your current queue. Once enabled, Claude will greet you with a queue status and ask about new posts at the start of every session.
+
+> **Note:** The hook reads `queue.json` locally. Make sure you have `git pull` run to keep it in sync with the latest queue state before starting a session.
+
 ## Troubleshooting
 
 - If posts aren't being published, check the GitHub Actions logs for any error messages.
