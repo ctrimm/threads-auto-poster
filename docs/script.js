@@ -1,162 +1,170 @@
-const GITHUB_USERNAME = 'ctrimm';
-const REPO_NAME = 'threads-auto-poster';
-const MEDIA_REPO_NAME = 'threads-media-storage';
+let s3Enabled = false;
 
-function getToken() {
-  return localStorage.getItem('github_token') || '';
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+async function init() {
+  try {
+    const res = await fetch('/config');
+    const config = await res.json();
+    s3Enabled = config.s3_enabled;
+
+    if (s3Enabled) {
+      document.getElementById('uploadSection').style.display = 'block';
+      document.getElementById('urlHelp').textContent = '(or paste a URL directly)';
+    }
+  } catch (_) {
+    // config endpoint unreachable — server probably not running yet
+  }
+
+  await updateQueueList();
 }
 
-document.getElementById('postForm').addEventListener('submit', function(e) {
+// ---------------------------------------------------------------------------
+// Character counter
+// ---------------------------------------------------------------------------
+
+document.getElementById('postText').addEventListener('input', function () {
+  document.getElementById('charCount').textContent = `${this.value.length} / 500`;
+});
+
+// ---------------------------------------------------------------------------
+// Form submit
+// ---------------------------------------------------------------------------
+
+document.getElementById('postForm').addEventListener('submit', async function (e) {
   e.preventDefault();
-  addToQueue();
-});
 
-document.getElementById('tokenInput').addEventListener('change', function() {
-  localStorage.setItem('github_token', this.value);
-  showMessage('Token saved.', 'success');
-});
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
 
-// Load saved token on page load
-window.addEventListener('DOMContentLoaded', function() {
-  const saved = getToken();
-  if (saved) {
-    document.getElementById('tokenInput').value = saved;
-  }
-  updateQueueList();
-});
+  try {
+    const text = document.getElementById('postText').value.trim();
+    const scheduledTime = document.getElementById('scheduledTime').value;
+    const mediaFile = document.getElementById('mediaFile').files[0];
+    let mediaUrl = document.getElementById('mediaUrl').value.trim();
 
-async function addToQueue() {
-  const token = getToken();
-  if (!token) {
-    showMessage('Please enter your GitHub token in Settings above.', 'error');
-    return;
-  }
+    // If a file was chosen and S3 is available, upload it first
+    if (mediaFile && s3Enabled) {
+      mediaUrl = await uploadToS3(mediaFile);
+      if (!mediaUrl) return; // uploadToS3 already showed an error
+    }
 
-  const text = document.getElementById('postText').value;
-  const scheduledTime = document.getElementById('scheduledTime').value;
-  const mediaType = document.getElementById('mediaType').value;
-  const mediaFile = document.getElementById('mediaFile').files[0];
+    const mediaType = mediaUrl
+      ? detectMediaType(mediaUrl, mediaFile)
+      : 'TEXT';
 
-  if (!text || !scheduledTime) {
-    showMessage('Please enter both text and scheduled time.', 'error');
-    return;
-  }
+    const res = await fetch('/queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, scheduledTime, mediaType, mediaUrl }),
+    });
 
-  if (mediaType !== 'TEXT' && !mediaFile) {
-    showMessage('Please provide a media file for Image or Video posts.', 'error');
-    return;
-  }
-
-  let mediaUrl = '';
-  if (mediaFile) {
-    try {
-      mediaUrl = await uploadMedia(mediaFile, token);
-    } catch (error) {
-      showMessage('Failed to upload media. Please try again.', 'error');
+    if (!res.ok) {
+      const err = await res.json();
+      showMessage(err.error || 'Failed to add post.', 'error');
       return;
     }
+
+    showMessage('Post added to queue!', 'success');
+    document.getElementById('postForm').reset();
+    document.getElementById('charCount').textContent = '0 / 500';
+    await updateQueueList();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// S3 upload
+// ---------------------------------------------------------------------------
+
+async function uploadToS3(file) {
+  const status = document.getElementById('uploadStatus');
+  status.textContent = 'Uploading…';
+
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch('/upload', { method: 'POST', body: form });
+  const data = await res.json();
+
+  if (!res.ok) {
+    showMessage(data.error || 'Upload failed.', 'error');
+    status.textContent = '';
+    return null;
   }
 
-  const postData = { text, scheduledTime, mediaType, mediaUrl };
-
-  try {
-    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/queue.json`, {
-      headers: { 'Authorization': `token ${token}` }
-    });
-    const data = await response.json();
-    let queue = JSON.parse(atob(data.content));
-
-    postData.id = Date.now();
-    queue.push(postData);
-
-    const updatedContent = btoa(unescape(encodeURIComponent(JSON.stringify(queue, null, 2))));
-
-    const putResponse = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/queue.json`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `token ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: 'Add new post to queue',
-        content: updatedContent,
-        sha: data.sha
-      })
-    });
-
-    if (!putResponse.ok) {
-      throw new Error(`GitHub API error: ${putResponse.status}`);
-    }
-
-    showMessage('Post added to queue successfully!', 'success');
-    updateQueueList();
-  } catch (error) {
-    console.error('Error:', error);
-    showMessage('Failed to add post to queue. Please try again.', 'error');
-  }
+  status.textContent = 'Uploaded.';
+  return data.url;
 }
 
-async function uploadMedia(file, token) {
-  const content = await readFileAsBase64(file);
-  const fileName = `${Date.now()}-${file.name}`;
-
-  const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${MEDIA_REPO_NAME}/contents/${fileName}`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `token ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: 'Upload media for Threads post',
-      content: content
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Media upload failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.content.download_url;
-}
-
-function readFileAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = error => reject(error);
-    reader.readAsDataURL(file);
-  });
-}
+// ---------------------------------------------------------------------------
+// Queue display
+// ---------------------------------------------------------------------------
 
 async function updateQueueList() {
-  try {
-    const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_USERNAME}/${REPO_NAME}/main/queue.json`);
-    const queue = await response.json();
+  const list = document.getElementById('queueList');
 
-    const queueList = document.getElementById('queueList');
-    queueList.innerHTML = '';
+  try {
+    const res = await fetch('/queue');
+    const queue = await res.json();
+
+    list.innerHTML = '';
 
     if (queue.length === 0) {
-      queueList.innerHTML = '<li>No posts scheduled.</li>';
+      list.innerHTML = '<li class="empty">No posts scheduled.</li>';
       return;
     }
 
     queue.forEach(post => {
       const li = document.createElement('li');
-      li.textContent = `${post.text} (${post.mediaType}, Scheduled: ${post.scheduledTime})`;
+
+      const info = document.createElement('span');
+      const when = new Date(post.scheduledTime).toLocaleString();
+      info.textContent = `${when} — ${post.text}`;
       if (post.mediaUrl) {
-        li.textContent += ` - Media: ${post.mediaUrl}`;
+        info.textContent += ` [${post.mediaType}]`;
       }
-      queueList.appendChild(li);
+
+      const del = document.createElement('button');
+      del.textContent = 'Remove';
+      del.className = 'delete-btn';
+      del.addEventListener('click', () => removePost(post.id));
+
+      li.appendChild(info);
+      li.appendChild(del);
+      list.appendChild(li);
     });
-  } catch (error) {
-    console.error('Error loading queue:', error);
+  } catch (err) {
+    console.error('Could not load queue:', err);
   }
 }
 
-function showMessage(message, type) {
-  const messageDiv = document.getElementById('message');
-  messageDiv.textContent = message;
-  messageDiv.className = type;
+async function removePost(id) {
+  await fetch(`/queue/${id}`, { method: 'DELETE' });
+  await updateQueueList();
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function detectMediaType(url, file) {
+  const mime = file ? file.type : '';
+  if (mime.startsWith('video/') || /\.(mp4|mov|avi|webm)$/i.test(url)) return 'VIDEO';
+  if (mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(url)) return 'IMAGE';
+  return 'TEXT';
+}
+
+function showMessage(text, type) {
+  const div = document.getElementById('message');
+  div.textContent = text;
+  div.className = type;
+  setTimeout(() => { div.textContent = ''; div.className = ''; }, 4000);
+}
+
+// ---------------------------------------------------------------------------
+
+init();

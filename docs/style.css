@@ -7,16 +7,21 @@ body {
 }
 
 .container {
-  max-width: 800px;
+  max-width: 700px;
   margin: auto;
   background: white;
-  padding: 20px;
-  border-radius: 5px;
+  padding: 24px;
+  border-radius: 8px;
   box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 
 h1, h2 {
   color: #333;
+  margin-top: 0;
+}
+
+h2 {
+  margin-top: 28px;
 }
 
 form {
@@ -24,28 +29,89 @@ form {
   flex-direction: column;
 }
 
-textarea, select, input, button {
+textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+textarea, input[type="datetime-local"], input[type="url"], input[type="file"], button, select {
   margin-bottom: 10px;
   padding: 10px;
   border-radius: 5px;
   border: 1px solid #ddd;
+  font-size: 0.95em;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-button {
+label {
+  font-size: 0.85em;
+  color: #555;
+  margin-bottom: 3px;
+}
+
+.char-count {
+  font-size: 0.8em;
+  color: #999;
+  text-align: right;
+  margin-top: -8px;
+  margin-bottom: 10px;
+}
+
+button[type="submit"] {
   background-color: #4CAF50;
   color: white;
   border: none;
   cursor: pointer;
+  font-size: 1em;
+  margin-top: 6px;
 }
 
-button:hover {
+button[type="submit"]:hover {
   background-color: #45a049;
 }
 
+button[type="submit"]:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
+}
+
+/* Media / optional section */
+details {
+  margin-bottom: 14px;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  padding: 10px 14px;
+}
+
+details summary {
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #555;
+  user-select: none;
+}
+
+.media-area {
+  margin-top: 10px;
+}
+
+.hint {
+  font-size: 0.85em;
+  color: #999;
+}
+
+#uploadStatus {
+  font-size: 0.85em;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+/* Messages */
 #message {
-  margin-top: 20px;
+  margin-top: 12px;
   padding: 10px;
   border-radius: 5px;
+  min-height: 18px;
 }
 
 #message.success {
@@ -58,39 +124,43 @@ button:hover {
   color: #721c24;
 }
 
+/* Queue list */
 #queueList {
-  list-style-type: none;
+  list-style: none;
   padding: 0;
+  margin: 0;
 }
 
 #queueList li {
-  background-color: #f9f9f9;
-  margin-bottom: 10px;
-  padding: 10px;
-  border-radius: 5px;
-}
-
-details {
-  margin-bottom: 20px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  padding: 10px;
-}
-
-details summary {
-  cursor: pointer;
-  font-weight: bold;
-  color: #555;
-}
-
-.settings {
   display: flex;
-  flex-direction: column;
-  margin-top: 10px;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f9f9f9;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 5px;
+  font-size: 0.9em;
+  gap: 10px;
 }
 
-.settings label {
-  font-size: 0.9em;
-  color: #666;
-  margin-bottom: 5px;
+#queueList li.empty {
+  color: #999;
+  font-style: italic;
+}
+
+.delete-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 0.8em;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  width: auto;
+  margin: 0;
+}
+
+.delete-btn:hover {
+  background: #c0392b;
 }
