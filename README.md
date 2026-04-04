@@ -1,91 +1,123 @@
-#### Update - This project is on hold until I create an App within the Meta Developers Portal. Will look at this again in a week or two (est. November 1, 2024).
-
 # Threads Auto-Poster
 
-This project allows you to schedule and automatically post content to Threads using the Threads API. It uses GitHub Pages for the user interface and GitHub Actions for scheduling and posting.
+Schedule and automatically post content to Threads. Runs entirely on your local machine — no GitHub Actions, no tokens in the browser.
+
+## How it works
+
+- A lightweight Flask web app (served at `localhost:5000`) lets you write posts and pick a scheduled time.
+- Posts are saved to `queue.json`.
+- A cron job runs `src/post_to_threads.py` on a schedule, checks the queue, and publishes anything that's due.
+- Media uploads are text-only by default. S3 support is available optionally (see below).
 
 ## Setup
 
-1. Clone the two new GitHub repositories:
-   - `threads-auto-poster` (This repository)
-   - `threads-media-storage` (For storing media files that you upload from your machine)
+### 1. Clone the repo
 
-2. Clone the `threads-auto-poster` repository to your local machine.
+```bash
+git clone https://github.com/ctrimm/threads-auto-poster.git
+cd threads-auto-poster
+```
 
-3. Update the following files with your GitHub username:
-   - `docs/script.js`: Replace `YOUR_USERNAME` with your GitHub username
+### 2. Install dependencies
 
-4. In your GitHub repository settings:
-   - Enable GitHub Pages and set the source to the `docs/` folder on the main branch.
-   - Add the following secrets:
-     - `THREADS_ACCESS_TOKEN`: Your Threads API access token
-     - `THREADS_USER_ID`: Your Threads user ID
-     - `GITHUB_TOKEN`: A personal access token with repo scope
+```bash
+pip install -r requirements.txt
+```
 
-5. Commit and push all changes to GitHub.
+### 3. Configure credentials
 
-## Usage
+```bash
+cp .env.example .env
+```
 
-1. Access the web interface through the GitHub Pages URL (typically `https://your-username.github.io/threads-auto-poster/`).
+Edit `.env` and fill in your Threads API credentials:
 
-2. To add a new post to the queue:
-   - Enter the post text
-   - Select the media type (Text, Image, or Video)
-   - If Image or Video is selected, choose the file to upload
-   - Set the scheduled time for the post
-   - Click "Add to Queue"
+```
+THREADS_ACCESS_TOKEN=your_threads_access_token_here
+THREADS_USER_ID=your_threads_user_id_here
+```
 
-3. The system will automatically:
-   - Upload any media to the `threads-media-storage` repository
-   - Add the post to the queue
-   - Schedule the post for publishing
+> Get these from the [Meta Developer Portal](https://developers.facebook.com/apps/) after creating a Threads app.
 
-4. The GitHub Action, `post-to-threads.yml`, will run every hour, check the queue, and post to Threads if there's a scheduled post due.
+### 4. Start the web UI
 
-## Files and Their Purposes
+```bash
+python app.py
+```
 
-- `docs/index.html`: The web interface for adding posts to the queue
-- `docs/script.js`: Handles the logic for the web interface and interacts with the GitHub API
-- `src/post_to_threads.py`: Publishes posts to Threads
-- `src/queue_manager.py`: Manages the posting queue
-- `.github/workflows/post-to-threads.yml`: GitHub Action for posting to Threads
-- `.github/workflows/update-queue.yml`: GitHub Action for updating and sorting the queue
-- `queue.json`: Stores the queue of posts to be published
+Open [http://localhost:5000](http://localhost:5000) in your browser.
 
-## Troubleshooting
+### 5. Set up the cron job
 
-- If posts aren't being published, check the GitHub Actions logs for any error messages.
-- Ensure that your Threads API key and user ID are correctly set in the repository secrets.
-- Verify that the personal access token has the necessary permissions to write to both repositories.
+Run `crontab -e` and add a line to post every hour:
 
-## Contributing
+```
+0 * * * * cd /path/to/threads-auto-poster && python src/post_to_threads.py >> /tmp/threads-poster.log 2>&1
+```
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Replace `/path/to/threads-auto-poster` with the absolute path to where you cloned the repo.
+
+The script loads `.env` automatically, so no extra env setup is needed in the crontab.
+
+## Optional: S3 media uploads
+
+By default the app is text-only. To enable image/video uploads via an S3 bucket:
+
+1. Uncomment `boto3>=1.26.0` in `requirements.txt` and run `pip install boto3`.
+
+2. Add the following to your `.env`:
+
+   ```
+   AWS_ACCESS_KEY_ID=your_aws_access_key_id
+   AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+   AWS_REGION=us-east-1
+   AWS_S3_BUCKET=your-bucket-name
+   ```
+
+3. The IAM user needs `s3:PutObject` permission on the bucket. Make sure the bucket (or a CloudFront distribution in front of it) serves files publicly so the Threads API can fetch them.
+
+4. Restart `python app.py` — a file upload button will appear in the UI automatically.
+
+## Optional: Claude Code session hook
+
+If you use Claude Code, a `SessionStart` hook is included that reads the queue and prompts Claude to ask whether you'd like to add a new post at the start of every session.
+
+```bash
+# Make the hook executable
+chmod +x .claude/hooks/session-start.sh
+
+# Verify it works (requires python3)
+CLAUDE_PROJECT_DIR=$(pwd) .claude/hooks/session-start.sh
+```
+
+## Running tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+## Files
+
+```
+app.py                        Local Flask server
+src/
+  post_to_threads.py          Posts due items from the queue to Threads
+  queue_manager.py            Reads/writes queue.json
+tests/
+  test_queue_manager.py
+  test_post_to_threads.py
+docs/
+  index.html                  Web UI
+  script.js
+  style.css
+.claude/
+  hooks/session-start.sh      Claude Code session hook
+  settings.json
+.env.example                  Credentials template
+queue.json                    The post queue (auto-created)
+requirements.txt
+```
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
-
-## Folder Structure
-
-``` json
-threads-auto-poster/
-├── .github/
-│   └── workflows/
-│       ├── post-to-threads.yml
-│       └── update-queue.yml
-├── docs/
-│   ├── index.html
-│   ├── style.css
-│   └── script.js
-├── src/
-│   ├── post_to_threads.py
-│   └── queue_manager.py
-├── .gitignore
-├── README.md
-├── requirements.txt
-└── queue.json
-
-threads-media-storage/
-└── (This repository will be populated with media files as they are uploaded)
-```
+MIT

@@ -9,8 +9,15 @@ class QueueManager:
   def load_queue(self):
     try:
       with open(self.queue_file, 'r') as f:
-        return json.load(f)
+        data = json.load(f)
+        if not isinstance(data, list):
+          print(f"Warning: {self.queue_file} did not contain a list — resetting to empty queue")
+          return []
+        return data
     except FileNotFoundError:
+      return []
+    except json.JSONDecodeError as e:
+      print(f"Warning: {self.queue_file} is malformed ({e}) — resetting to empty queue")
       return []
 
   def save_queue(self):

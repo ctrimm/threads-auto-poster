@@ -8,20 +8,36 @@
 </head>
 <body>
   <div class="container">
-    <h1>Add Post to Threads Queue</h1>
+    <h1>Threads Auto-Poster</h1>
+
     <form id="postForm">
-      <textarea id="postText" placeholder="Enter your post text here" required></textarea>
-      <select id="mediaType">
-        <option value="TEXT">Text Only</option>
-        <option value="IMAGE">Image</option>
-        <option value="VIDEO">Video</option>
-      </select>
-      <input type="file" id="mediaFile" accept="image/*,video/*">
+      <textarea id="postText" placeholder="What do you want to post?" required maxlength="500"></textarea>
+      <div id="charCount" class="char-count">0 / 500</div>
+
+      <label for="scheduledTime">Schedule for</label>
       <input type="datetime-local" id="scheduledTime" required>
-      <button type="submit">Add to Queue</button>
+
+      <details id="mediaSection">
+        <summary>Add media (optional)</summary>
+        <div class="media-area">
+          <div id="uploadSection" style="display:none">
+            <label for="mediaFile">Upload to S3</label>
+            <input type="file" id="mediaFile" accept="image/*,video/*">
+            <div id="uploadStatus"></div>
+          </div>
+          <label for="mediaUrl">
+            Media URL <span id="urlHelp" class="hint">(paste a public image or video URL)</span>
+          </label>
+          <input type="url" id="mediaUrl" placeholder="https://...">
+        </div>
+      </details>
+
+      <button type="submit" id="submitBtn">Add to Queue</button>
     </form>
+
     <div id="message"></div>
-    <h2>Current Queue</h2>
+
+    <h2>Scheduled Queue</h2>
     <ul id="queueList"></ul>
   </div>
   <script src="script.js"></script>

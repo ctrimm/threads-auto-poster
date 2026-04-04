@@ -1,120 +1,170 @@
-document.getElementById('postForm').addEventListener('submit', function(e) {
-  e.preventDefault();
-  addToQueue();
+let s3Enabled = false;
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+async function init() {
+  try {
+    const res = await fetch('/config');
+    const config = await res.json();
+    s3Enabled = config.s3_enabled;
+
+    if (s3Enabled) {
+      document.getElementById('uploadSection').style.display = 'block';
+      document.getElementById('urlHelp').textContent = '(or paste a URL directly)';
+    }
+  } catch (_) {
+    // config endpoint unreachable — server probably not running yet
+  }
+
+  await updateQueueList();
+}
+
+// ---------------------------------------------------------------------------
+// Character counter
+// ---------------------------------------------------------------------------
+
+document.getElementById('postText').addEventListener('input', function () {
+  document.getElementById('charCount').textContent = `${this.value.length} / 500`;
 });
 
-async function addToQueue() {
-  const text = document.getElementById('postText').value;
-  const scheduledTime = document.getElementById('scheduledTime').value;
-  const mediaType = document.getElementById('mediaType').value;
-  const mediaFile = document.getElementById('mediaFile').files[0];
-  
-  if (!text || !scheduledTime) {
-    showMessage('Please enter both text and scheduled time.', 'error');
-    return;
-  }
+// ---------------------------------------------------------------------------
+// Form submit
+// ---------------------------------------------------------------------------
 
-  if (mediaType !== 'TEXT' && !mediaFile) {
-    showMessage('Please provide a media file for Image or Video posts.', 'error');
-    return;
-  }
+document.getElementById('postForm').addEventListener('submit', async function (e) {
+  e.preventDefault();
 
-  let mediaUrl = '';
-  if (mediaFile) {
-    try {
-      mediaUrl = await uploadMedia(mediaFile);
-    } catch (error) {
-      showMessage('Failed to upload media. Please try again.', 'error');
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+
+  try {
+    const text = document.getElementById('postText').value.trim();
+    const scheduledTime = document.getElementById('scheduledTime').value;
+    const mediaFile = document.getElementById('mediaFile').files[0];
+    let mediaUrl = document.getElementById('mediaUrl').value.trim();
+
+    // If a file was chosen and S3 is available, upload it first
+    if (mediaFile && s3Enabled) {
+      mediaUrl = await uploadToS3(mediaFile);
+      if (!mediaUrl) return; // uploadToS3 already showed an error
+    }
+
+    const mediaType = mediaUrl
+      ? detectMediaType(mediaUrl, mediaFile)
+      : 'TEXT';
+
+    const res = await fetch('/queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, scheduledTime, mediaType, mediaUrl }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      showMessage(err.error || 'Failed to add post.', 'error');
       return;
     }
+
+    showMessage('Post added to queue!', 'success');
+    document.getElementById('postForm').reset();
+    document.getElementById('charCount').textContent = '0 / 500';
+    await updateQueueList();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// S3 upload
+// ---------------------------------------------------------------------------
+
+async function uploadToS3(file) {
+  const status = document.getElementById('uploadStatus');
+  status.textContent = 'Uploading…';
+
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch('/upload', { method: 'POST', body: form });
+  const data = await res.json();
+
+  if (!res.ok) {
+    showMessage(data.error || 'Upload failed.', 'error');
+    status.textContent = '';
+    return null;
   }
 
-  const postData = { text, scheduledTime, mediaType, mediaUrl };
-
-  try {
-    const response = await fetch('https://api.github.com/repos/YOUR_USERNAME/threads-auto-poster/contents/queue.json');
-    const data = await response.json();
-    let queue = JSON.parse(atob(data.content));
-    
-    postData.id = queue.length + 1;
-    queue.push(postData);
-
-    const updatedContent = btoa(JSON.stringify(queue, null, 2));
-    
-    await fetch('https://api.github.com/repos/YOUR_USERNAME/threads-auto-poster/contents/queue.json', {
-      method: 'PUT',
-      headers: {
-        'Authorization': `token ${YOUR_GITHUB_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: 'Add new post to queue',
-        content: updatedContent,
-        sha: data.sha
-      })
-    });
-
-    showMessage('Post added to queue successfully!', 'success');
-    updateQueueList();
-  } catch (error) {
-    console.error('Error:', error);
-    showMessage('Failed to add post to queue. Please try again.', 'error');
-  }
+  status.textContent = 'Uploaded.';
+  return data.url;
 }
 
-async function uploadMedia(file) {
-  const content = await readFileAsBase64(file);
-  const fileName = `${Date.now()}-${file.name}`;
-  
-  const response = await fetch(`https://api.github.com/repos/YOUR_USERNAME/threads-media-storage/contents/${fileName}`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `token ${YOUR_GITHUB_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: 'Upload media for Threads post',
-      content: content
-    })
-  });
-
-  const data = await response.json();
-  return data.content.download_url;
-}
-
-function readFileAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = error => reject(error);
-    reader.readAsDataURL(file);
-  });
-}
+// ---------------------------------------------------------------------------
+// Queue display
+// ---------------------------------------------------------------------------
 
 async function updateQueueList() {
+  const list = document.getElementById('queueList');
+
   try {
-    const response = await fetch('https://raw.githubusercontent.com/YOUR_USERNAME/threads-auto-poster/main/queue.json');
-    const queue = await response.json();
-    
-    const queueList = document.getElementById('queueList');
-    queueList.innerHTML = '';
+    const res = await fetch('/queue');
+    const queue = await res.json();
+
+    list.innerHTML = '';
+
+    if (queue.length === 0) {
+      list.innerHTML = '<li class="empty">No posts scheduled.</li>';
+      return;
+    }
+
     queue.forEach(post => {
       const li = document.createElement('li');
-      li.textContent = `${post.text} (${post.mediaType}, Scheduled: ${post.scheduledTime})`;
+
+      const info = document.createElement('span');
+      const when = new Date(post.scheduledTime).toLocaleString();
+      info.textContent = `${when} — ${post.text}`;
       if (post.mediaUrl) {
-        li.textContent += ` - Media: ${post.mediaUrl}`;
+        info.textContent += ` [${post.mediaType}]`;
       }
-      queueList.appendChild(li);
+
+      const del = document.createElement('button');
+      del.textContent = 'Remove';
+      del.className = 'delete-btn';
+      del.addEventListener('click', () => removePost(post.id));
+
+      li.appendChild(info);
+      li.appendChild(del);
+      list.appendChild(li);
     });
-  } catch (error) {
-      console.error('Error:', error);
+  } catch (err) {
+    console.error('Could not load queue:', err);
   }
 }
 
-function showMessage(message, type) {
-  const messageDiv = document.getElementById('message');
-  messageDiv.textContent = message;
-  messageDiv.className = type;
+async function removePost(id) {
+  await fetch(`/queue/${id}`, { method: 'DELETE' });
+  await updateQueueList();
 }
 
-updateQueueList();
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function detectMediaType(url, file) {
+  const mime = file ? file.type : '';
+  if (mime.startsWith('video/') || /\.(mp4|mov|avi|webm)$/i.test(url)) return 'VIDEO';
+  if (mime.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(url)) return 'IMAGE';
+  return 'TEXT';
+}
+
+function showMessage(text, type) {
+  const div = document.getElementById('message');
+  div.textContent = text;
+  div.className = type;
+  setTimeout(() => { div.textContent = ''; div.className = ''; }, 4000);
+}
+
+// ---------------------------------------------------------------------------
+
+init();
