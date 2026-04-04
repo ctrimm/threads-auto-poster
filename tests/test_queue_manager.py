@@ -97,6 +97,20 @@ class TestQueueManager(unittest.TestCase):
         self.assertEqual(self.qm.queue[0]['id'], 2)
         self.assertEqual(self.qm.queue[1]['id'], 1)
 
+    # --- resilience ---
+
+    def test_load_malformed_json_returns_empty(self):
+        with open(self.tmp.name, 'w') as f:
+            f.write('this is not json {{{')
+        qm = QueueManager(self.tmp.name)
+        self.assertEqual(qm.queue, [])
+
+    def test_load_non_list_json_returns_empty(self):
+        with open(self.tmp.name, 'w') as f:
+            f.write('{"key": "value"}')
+        qm = QueueManager(self.tmp.name)
+        self.assertEqual(qm.queue, [])
+
 
 if __name__ == '__main__':
     unittest.main()

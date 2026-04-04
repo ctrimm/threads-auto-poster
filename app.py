@@ -1,8 +1,11 @@
 import os
+import re
+import sys
 import time
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.utils import secure_filename
 
 load_dotenv()
 
@@ -10,11 +13,21 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 QUEUE_FILE = os.path.join(BASE_DIR, 'queue.json')
 
-import sys
 sys.path.insert(0, os.path.join(BASE_DIR, 'src'))
 from queue_manager import QueueManager
 
 app = Flask(__name__, static_folder='docs', static_url_path='')
+
+# Reject request bodies larger than 50 MB (guards the upload endpoint)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+
+ALLOWED_MEDIA_TYPES = {'TEXT', 'IMAGE', 'VIDEO'}
+ALLOWED_MIME_TYPES = {
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'video/mp4', 'video/quicktime', 'video/webm',
+}
+MAX_TEXT_LENGTH = 500
+_ISO_DATETIME_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$')
 
 
 # ---------------------------------------------------------------------------
@@ -38,17 +51,39 @@ def get_queue():
 
 @app.route('/queue', methods=['POST'])
 def add_to_queue():
-    data = request.get_json()
-    if not data or not data.get('text') or not data.get('scheduledTime'):
-        return jsonify({'error': 'text and scheduledTime are required'}), 400
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    text = data.get('text', '')
+    scheduled_time = data.get('scheduledTime', '')
+    media_type = data.get('mediaType', 'TEXT')
+    media_url = data.get('mediaUrl', '')
+
+    # --- Validate ---
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({'error': 'text is required'}), 400
+    if len(text) > MAX_TEXT_LENGTH:
+        return jsonify({'error': f'text must be {MAX_TEXT_LENGTH} characters or fewer'}), 400
+
+    if not isinstance(scheduled_time, str) or not _ISO_DATETIME_RE.match(scheduled_time):
+        return jsonify({'error': 'scheduledTime must be a valid datetime (YYYY-MM-DDTHH:MM)'}), 400
+
+    if media_type not in ALLOWED_MEDIA_TYPES:
+        return jsonify({'error': f'mediaType must be one of {sorted(ALLOWED_MEDIA_TYPES)}'}), 400
+
+    if media_url and not isinstance(media_url, str):
+        return jsonify({'error': 'mediaUrl must be a string'}), 400
+    if media_url and not media_url.startswith(('http://', 'https://')):
+        return jsonify({'error': 'mediaUrl must be an http/https URL'}), 400
 
     qm = QueueManager(QUEUE_FILE)
     post = {
         'id': int(time.time() * 1000),
-        'text': data['text'],
-        'scheduledTime': data['scheduledTime'],
-        'mediaType': data.get('mediaType', 'TEXT'),
-        'mediaUrl': data.get('mediaUrl', ''),
+        'text': text.strip(),
+        'scheduledTime': scheduled_time,
+        'mediaType': media_type,
+        'mediaUrl': media_url,
     }
     qm.queue.append(post)
     qm.sort_queue()
@@ -90,12 +125,21 @@ def upload_media():
     if not file or not file.filename:
         return jsonify({'error': 'No file provided'}), 400
 
+    # Validate MIME type against our allowlist (don't trust the browser value)
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        return jsonify({'error': 'File type not allowed. Use JPEG, PNG, GIF, WebP, MP4, MOV, or WebM.'}), 400
+
+    # Sanitise filename to prevent path traversal
+    safe_name = secure_filename(file.filename)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename'}), 400
+
     try:
         import boto3
     except ImportError:
         return jsonify({'error': 'boto3 not installed — run: pip install boto3'}), 500
 
-    key = f"threads-media/{int(time.time() * 1000)}-{file.filename}"
+    key = f"threads-media/{int(time.time() * 1000)}-{safe_name}"
     s3 = boto3.client('s3', region_name=region)
     s3.upload_fileobj(
         file, bucket, key,
@@ -108,4 +152,5 @@ def upload_media():
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(host='127.0.0.1', port=5000, debug=debug)

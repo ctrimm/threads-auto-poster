@@ -30,7 +30,7 @@ def post_to_threads(post):
     if post['mediaType'] in ['IMAGE', 'VIDEO']:
         payload[f"{post['mediaType'].lower()}_url"] = post['mediaUrl']
 
-    create_response = requests.post(create_url, data=payload)
+    create_response = requests.post(create_url, data=payload, timeout=30)
 
     if create_response.status_code != 200:
         print(f"Failed to create Threads container: {create_response.text}")
@@ -47,7 +47,7 @@ def post_to_threads(post):
     publish_response = requests.post(publish_url, data={
         "access_token": access_token,
         "creation_id": creation_id,
-    })
+    }, timeout=30)
 
     if publish_response.status_code == 200:
         print(f"Published: {post['text'][:60]}")
